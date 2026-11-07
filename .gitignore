@@ -8,4 +8,5 @@ dist/
 .mypy_cache/
 uv.lock
 data/
+build/
 db_meta.json
