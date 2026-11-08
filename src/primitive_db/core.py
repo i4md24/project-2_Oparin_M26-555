@@ -33,3 +33,24 @@ def create_table(metadata: dict, table_name: str, columns: list[str]) -> dict | 
     )
     print(f'Таблица "{table_name}" успешно создана со столбцами: {cols_str}')
     return metadata
+
+
+def drop_table(metadata: dict, table_name: str) -> dict | None:
+    """Удалить таблицу из метаданных.
+
+    Проверяет, что таблица существует, и удаляет её из словаря.
+    Возвращает обновлённые метаданные или None при ошибке.
+    """
+    if table_name not in metadata:
+        print(f'Ошибка: Таблица "{table_name}" не существует.')
+        return None
+
+    del metadata[table_name]
+    print(f'Таблица "{table_name}" успешно удалена.')
+    return metadata
+
+
+def list_tables(metadata: dict) -> None:
+    """Вывести имена всех таблиц, каждую на отдельной строке."""
+    for name in metadata:
+        print(f"- {name}")
