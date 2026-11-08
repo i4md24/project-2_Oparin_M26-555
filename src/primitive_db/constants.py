@@ -1,12 +1,10 @@
 """Константы primitive_db: пути, типы данных и имена команд."""
 
-from pathlib import Path
-
 # Файл с метаданными таблиц (лежит в рабочей директории)
-META_PATH = Path("db_meta.json")
+META_PATH = "db_meta.json"
 
 # Директория с файлами данных таблиц (data/<имя>.json)
-DATA_DIR = Path("data")
+DATA_DIR = "data"
 
 # Типы данных, поддерживаемые столбцами таблиц
 VALID_TYPES = ("int", "str", "bool")
