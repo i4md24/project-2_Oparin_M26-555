@@ -205,3 +205,42 @@ def update(
         return None
     print(f"Обновлено строк: {updated}.")
     return table_data
+
+
+def delete(
+    metadata: dict,
+    table_data: dict,
+    table_name: str,
+    where: tuple[str, str],
+) -> dict | None:
+    """Удалить строки, подходящие под условие.
+
+    Проверяет таблицу, столбец условия и тип значения. Возвращает
+    обновлённые данные таблицы или None, если удалять нечего.
+    """
+    if table_name not in metadata:
+        print(f'Ошибка: Таблица "{table_name}" не существует.')
+        return None
+    columns = metadata[table_name]["columns"]
+    where_col, where_raw = where
+    if where_col not in columns:
+        print(f'Ошибка: Столбца "{where_col}" в таблице "{table_name}" нет.')
+        return None
+    expected = parse_value(where_raw, columns[where_col])
+    if expected is None:
+        print(
+            f'Ошибка: значение "{where_raw}" для столбца "{where_col}" '
+            f"не приводится к типу {columns[where_col]}."
+        )
+        return None
+    deleted = 0
+    for key in sorted(table_data, key=int):
+        row = {"ID": int(key), **table_data[key]}
+        if row[where_col] == expected:
+            del table_data[key]
+            deleted += 1
+    if not deleted:
+        print("Подходящих строк не найдено.")
+        return None
+    print(f"Удалено строк: {deleted}.")
+    return table_data

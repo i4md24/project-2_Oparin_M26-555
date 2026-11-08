@@ -6,6 +6,7 @@ from prompt import string
 
 from primitive_db.constants import (
     CMD_CREATE_TABLE,
+    CMD_DELETE,
     CMD_DROP_TABLE,
     CMD_EXIT,
     CMD_HELP,
@@ -17,6 +18,7 @@ from primitive_db.constants import (
 )
 from primitive_db.core import (
     create_table,
+    delete,
     drop_table,
     insert,
     list_tables,
@@ -42,6 +44,7 @@ def print_help() -> None:
     print("insert into <имя_таблицы> values (<значение>, ...) - добавить строку")
     print("select from <имя_таблицы> [where <столбец> = <значение>] - показать строки")
     print("update <таблица> set <столбец> = <значение> where ... - изменить строки")
+    print("delete from <имя_таблицы> where <столбец> = <значение> - удалить строки")
     print("\nОбщие команды:")
     print("exit - выйти из программы")
     print("help - справочная информация")
@@ -134,6 +137,26 @@ def run() -> None:
             else:
                 print(
                     "Использование: update <таблица> set <столбец> = <значение> "
+                    "where <столбец> = <значение>"
+                )
+        elif command == CMD_DELETE:
+            if (
+                len(parts) == 7
+                and parts[1] == "from"
+                and parts[3] == "where"
+                and parts[5] == "="
+            ):
+                result = delete(
+                    metadata,
+                    load_table_data(parts[2]),
+                    parts[2],
+                    (parts[4], parts[6]),
+                )
+                if result is not None:
+                    save_table_data(parts[2], result)
+            else:
+                print(
+                    "Использование: delete from <таблица> "
                     "where <столбец> = <значение>"
                 )
         elif command == CMD_HELP:
