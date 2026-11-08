@@ -4,7 +4,6 @@ import shlex
 
 from prompt import string
 
-from primitive_db.caching import create_cacher
 from primitive_db.constants import (
     CMD_CREATE_TABLE,
     CMD_DELETE,
@@ -25,6 +24,13 @@ from primitive_db.core import (
     select,
     update,
 )
+from primitive_db.decorators import create_cacher
+from primitive_db.parser import (
+    parse_delete_query,
+    parse_insert_query,
+    parse_select_query,
+    parse_update_query,
+)
 
 
 def print_help() -> None:
@@ -44,29 +50,14 @@ def print_help() -> None:
     print("help - справочная информация")
 
 
-def parse_insert_values(raw: str) -> list[str] | None:
-    """Разобрать строку "(Sergei, 28, true)" в список значений.
-
-    Возвращает список строк-значений или None при ошибке формата.
-    """
-    raw = raw.strip()
-    if not raw.startswith("(") or not raw.endswith(")"):
-        print("Значения нужно указать в круглых скобках: values (<значение>, ...)")
-        return None
-    inner = raw[1:-1].strip()
-    if not inner:
-        return []
-    return [token.strip() for token in inner.split(",")]
-
-
 def run() -> None:
     """Запустить цикл обработки команд.
 
-    Движок только разбирает команду на части и вызывает функцию ядра;
-    вся работа с файлами и перехват ошибок живут в core. Результаты
-    select кэшируются замыканием create_cacher; после любой команды,
-    меняющей данные, кэш пересоздаётся, чтобы не показывать
-    устаревшие строки.
+    Движок разбивает ввод на токены (shlex), разбор сложных команд
+    выполняет parser, а вызов функций ядра остаётся здесь; вся работа
+    с файлами и перехват ошибок живут в core. Результаты select
+    кэшируются замыканием create_cacher; после любой команды, меняющей
+    данные, кэш пересоздаётся, чтобы не показывать устаревшие строки.
     """
     print_help()
     cached_select = create_cacher()
@@ -90,64 +81,30 @@ def run() -> None:
         elif command == CMD_LIST_TABLES:
             list_tables()
         elif command == CMD_INSERT:
-            if len(parts) >= 5 and parts[1] == "into" and parts[3] == "values":
-                values = parse_insert_values(" ".join(parts[4:]))
-                if values is not None:
-                    insert(parts[2], values)
-                    cached_select = create_cacher()
-            else:
-                print("Использование: insert into <таблица> values (<значение>, ...)")
+            parsed = parse_insert_query(parts)
+            if parsed is not None:
+                table, values = parsed
+                insert(table, values)
+                cached_select = create_cacher()
         elif command == CMD_SELECT:
-            if len(parts) == 3 and parts[1] == "from":
-                table = cached_select((parts[2], None), lambda: select(parts[2]))
-                if table is not None:
-                    print(table)
-            elif (
-                len(parts) == 7
-                and parts[1] == "from"
-                and parts[3] == "where"
-                and parts[5] == "="
-            ):
-                where = (parts[4], parts[6])
-                table = cached_select(
-                    (parts[2], where), lambda: select(parts[2], where)
-                )
-                if table is not None:
-                    print(table)
-            else:
-                print(
-                    "Использование: select from <таблица> "
-                    "[where <столбец> = <значение>]"
-                )
+            parsed = parse_select_query(parts)
+            if parsed is not None:
+                table, where = parsed
+                result = cached_select((table, where), lambda: select(table, where))
+                if result is not None:
+                    print(result)
         elif command == CMD_UPDATE:
-            if (
-                len(parts) == 10
-                and parts[2] == "set"
-                and parts[4] == "="
-                and parts[6] == "where"
-                and parts[8] == "="
-            ):
-                update(parts[1], parts[3], parts[5], (parts[7], parts[9]))
+            parsed = parse_update_query(parts)
+            if parsed is not None:
+                table, set_col, raw_value, where = parsed
+                update(table, set_col, raw_value, where)
                 cached_select = create_cacher()
-            else:
-                print(
-                    "Использование: update <таблица> set <столбец> = <значение> "
-                    "where <столбец> = <значение>"
-                )
         elif command == CMD_DELETE:
-            if (
-                len(parts) == 7
-                and parts[1] == "from"
-                and parts[3] == "where"
-                and parts[5] == "="
-            ):
-                delete(parts[2], (parts[4], parts[6]))
+            parsed = parse_delete_query(parts)
+            if parsed is not None:
+                table, where = parsed
+                delete(table, where)
                 cached_select = create_cacher()
-            else:
-                print(
-                    "Использование: delete from <таблица> "
-                    "where <столбец> = <значение>"
-                )
         elif command == CMD_HELP:
             print_help()
         elif command == CMD_EXIT:
