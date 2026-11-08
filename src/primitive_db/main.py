@@ -4,7 +4,7 @@ from primitive_db import engine
 
 
 def main() -> None:
-    engine.welcome()
+    engine.run()
 
 
 if __name__ == "__main__":
