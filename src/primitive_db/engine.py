@@ -12,9 +12,17 @@ from primitive_db.constants import (
     CMD_INSERT,
     CMD_LIST_TABLES,
     CMD_SELECT,
+    CMD_UPDATE,
     META_PATH,
 )
-from primitive_db.core import create_table, drop_table, insert, list_tables, select
+from primitive_db.core import (
+    create_table,
+    drop_table,
+    insert,
+    list_tables,
+    select,
+    update,
+)
 from primitive_db.utils import (
     load_metadata,
     load_table_data,
@@ -33,6 +41,7 @@ def print_help() -> None:
     print("\n***Процесс работы с данными***")
     print("insert into <имя_таблицы> values (<значение>, ...) - добавить строку")
     print("select from <имя_таблицы> [where <столбец> = <значение>] - показать строки")
+    print("update <таблица> set <столбец> = <значение> where ... - изменить строки")
     print("\nОбщие команды:")
     print("exit - выйти из программы")
     print("help - справочная информация")
@@ -103,6 +112,29 @@ def run() -> None:
                 print(
                     "Использование: select from <таблица> "
                     "[where <столбец> = <значение>]"
+                )
+        elif command == CMD_UPDATE:
+            if (
+                len(parts) == 10
+                and parts[2] == "set"
+                and parts[4] == "="
+                and parts[6] == "where"
+                and parts[8] == "="
+            ):
+                result = update(
+                    metadata,
+                    load_table_data(parts[1]),
+                    parts[1],
+                    parts[3],
+                    parts[5],
+                    (parts[7], parts[9]),
+                )
+                if result is not None:
+                    save_table_data(parts[1], result)
+            else:
+                print(
+                    "Использование: update <таблица> set <столбец> = <значение> "
+                    "where <столбец> = <значение>"
                 )
         elif command == CMD_HELP:
             print_help()

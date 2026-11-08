@@ -151,3 +151,57 @@ def select(
         if where is None or row[col] == expected:
             table.add_row([row[name] for name in columns])
     print(table)
+
+
+def update(
+    metadata: dict,
+    table_data: dict,
+    table_name: str,
+    set_col: str,
+    raw_value: str,
+    where: tuple[str, str],
+) -> dict | None:
+    """Обновить значение столбца в строках, подходящих под условие.
+
+    Проверяет таблицу, столбцы и типы значений. Возвращает
+    обновлённые данные таблицы или None, если менять нечего.
+    """
+    if table_name not in metadata:
+        print(f'Ошибка: Таблица "{table_name}" не существует.')
+        return None
+    columns = metadata[table_name]["columns"]
+    if set_col not in columns:
+        print(f'Ошибка: Столбца "{set_col}" в таблице "{table_name}" нет.')
+        return None
+    if set_col == "ID":
+        print('Ошибка: Столбец "ID" изменять нельзя, он генерируется сам.')
+        return None
+    where_col, where_raw = where
+    if where_col not in columns:
+        print(f'Ошибка: Столбца "{where_col}" в таблице "{table_name}" нет.')
+        return None
+    value = parse_value(raw_value, columns[set_col])
+    if value is None:
+        print(
+            f'Ошибка: значение "{raw_value}" для столбца "{set_col}" '
+            f"не приводится к типу {columns[set_col]}."
+        )
+        return None
+    expected = parse_value(where_raw, columns[where_col])
+    if expected is None:
+        print(
+            f'Ошибка: значение "{where_raw}" для столбца "{where_col}" '
+            f"не приводится к типу {columns[where_col]}."
+        )
+        return None
+    updated = 0
+    for key in sorted(table_data, key=int):
+        row = {"ID": int(key), **table_data[key]}
+        if row[where_col] == expected:
+            table_data[key][set_col] = value
+            updated += 1
+    if not updated:
+        print("Подходящих строк не найдено.")
+        return None
+    print(f"Обновлено строк: {updated}.")
+    return table_data
