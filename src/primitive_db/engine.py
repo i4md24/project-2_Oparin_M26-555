@@ -4,6 +4,7 @@ import shlex
 
 from prompt import string
 
+from primitive_db.caching import create_cacher
 from primitive_db.constants import (
     CMD_CREATE_TABLE,
     CMD_DELETE,
@@ -14,7 +15,6 @@ from primitive_db.constants import (
     CMD_LIST_TABLES,
     CMD_SELECT,
     CMD_UPDATE,
-    META_PATH,
 )
 from primitive_db.core import (
     create_table,
@@ -24,12 +24,6 @@ from primitive_db.core import (
     list_tables,
     select,
     update,
-)
-from primitive_db.utils import (
-    load_metadata,
-    load_table_data,
-    save_metadata,
-    save_table_data,
 )
 
 
@@ -66,10 +60,17 @@ def parse_insert_values(raw: str) -> list[str] | None:
 
 
 def run() -> None:
-    """Запустить цикл обработки команд."""
+    """Запустить цикл обработки команд.
+
+    Движок только разбирает команду на части и вызывает функцию ядра;
+    вся работа с файлами и перехват ошибок живут в core. Результаты
+    select кэшируются замыканием create_cacher; после любой команды,
+    меняющей данные, кэш пересоздаётся, чтобы не показывать
+    устаревшие строки.
+    """
     print_help()
+    cached_select = create_cacher()
     while True:
-        metadata = load_metadata(META_PATH)
         parts = shlex.split(string("Введите команду: "))
         if not parts:
             continue
@@ -78,31 +79,29 @@ def run() -> None:
             if not args:
                 print("Использование: create_table <имя_таблицы> <столбец:тип> ...")
             else:
-                result = create_table(metadata, args[0], args[1:])
-                if result is not None:
-                    save_metadata(META_PATH, result)
+                create_table(args[0], args[1:])
+                cached_select = create_cacher()
         elif command == CMD_DROP_TABLE:
             if not args:
                 print("Использование: drop_table <имя_таблицы>")
             else:
-                result = drop_table(metadata, args[0])
-                if result is not None:
-                    save_metadata(META_PATH, result)
+                drop_table(args[0])
+                cached_select = create_cacher()
         elif command == CMD_LIST_TABLES:
-            list_tables(metadata)
+            list_tables()
         elif command == CMD_INSERT:
             if len(parts) >= 5 and parts[1] == "into" and parts[3] == "values":
                 values = parse_insert_values(" ".join(parts[4:]))
                 if values is not None:
-                    table_data = load_table_data(parts[2])
-                    result = insert(metadata, table_data, parts[2], values)
-                    if result is not None:
-                        save_table_data(parts[2], result)
+                    insert(parts[2], values)
+                    cached_select = create_cacher()
             else:
                 print("Использование: insert into <таблица> values (<значение>, ...)")
         elif command == CMD_SELECT:
             if len(parts) == 3 and parts[1] == "from":
-                select(metadata, load_table_data(parts[2]), parts[2])
+                table = cached_select((parts[2], None), lambda: select(parts[2]))
+                if table is not None:
+                    print(table)
             elif (
                 len(parts) == 7
                 and parts[1] == "from"
@@ -110,7 +109,11 @@ def run() -> None:
                 and parts[5] == "="
             ):
                 where = (parts[4], parts[6])
-                select(metadata, load_table_data(parts[2]), parts[2], where)
+                table = cached_select(
+                    (parts[2], where), lambda: select(parts[2], where)
+                )
+                if table is not None:
+                    print(table)
             else:
                 print(
                     "Использование: select from <таблица> "
@@ -124,16 +127,8 @@ def run() -> None:
                 and parts[6] == "where"
                 and parts[8] == "="
             ):
-                result = update(
-                    metadata,
-                    load_table_data(parts[1]),
-                    parts[1],
-                    parts[3],
-                    parts[5],
-                    (parts[7], parts[9]),
-                )
-                if result is not None:
-                    save_table_data(parts[1], result)
+                update(parts[1], parts[3], parts[5], (parts[7], parts[9]))
+                cached_select = create_cacher()
             else:
                 print(
                     "Использование: update <таблица> set <столбец> = <значение> "
@@ -146,14 +141,8 @@ def run() -> None:
                 and parts[3] == "where"
                 and parts[5] == "="
             ):
-                result = delete(
-                    metadata,
-                    load_table_data(parts[2]),
-                    parts[2],
-                    (parts[4], parts[6]),
-                )
-                if result is not None:
-                    save_table_data(parts[2], result)
+                delete(parts[2], (parts[4], parts[6]))
+                cached_select = create_cacher()
             else:
                 print(
                     "Использование: delete from <таблица> "
