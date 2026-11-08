@@ -1,20 +1,29 @@
-"""Ядро primitive_db: логика управления таблицами."""
+"""Ядро primitive_db: операции над таблицами и их данными."""
 
 from prettytable import PrettyTable
 
-from primitive_db.constants import VALID_TYPES
+from primitive_db.constants import META_PATH, VALID_TYPES
+from primitive_db.decorators import handle_db_errors
+from primitive_db.utils import (
+    load_metadata,
+    load_table_data,
+    save_metadata,
+    save_table_data,
+)
 
 
-def create_table(metadata: dict, table_name: str, columns: list[str]) -> dict | None:
+@handle_db_errors
+def create_table(table_name: str, columns: list[str]) -> None:
     """Создать таблицу в метаданных.
 
-    Автоматически добавляет столбец ID:int в начало, проверяет,
-    не существует ли таблица, и корректность типов столбцов.
-    Возвращает обновлённые метаданные или None при ошибке.
+    Сама загружает и сохраняет метаданные, автоматически добавляет
+    столбец ID:int в начало, проверяет, не существует ли уже такая
+    таблица, и корректность типов столбцов.
     """
+    metadata = load_metadata(META_PATH)
     if table_name in metadata:
         print(f'Ошибка: Таблица "{table_name}" уже существует.')
-        return None
+        return
     parsed: dict[str, str] = {}
     for token in columns:
         name, sep, col_type = token.partition(":")
@@ -26,34 +35,37 @@ def create_table(metadata: dict, table_name: str, columns: list[str]) -> dict | 
             or col_type not in VALID_TYPES
         ):
             print(f"Некорректное значение: {token}. Попробуйте снова.")
-            return None
+            return
         parsed[name] = col_type
     full_columns = {"ID": "int", **parsed}
     metadata[table_name] = {"columns": full_columns}
+    save_metadata(META_PATH, metadata)
     cols_str = ", ".join(
         f"{name}:{col_type}" for name, col_type in full_columns.items()
     )
     print(f'Таблица "{table_name}" успешно создана со столбцами: {cols_str}')
-    return metadata
 
 
-def drop_table(metadata: dict, table_name: str) -> dict | None:
+@handle_db_errors
+def drop_table(table_name: str) -> None:
     """Удалить таблицу из метаданных.
 
-    Проверяет, что таблица существует, и удаляет её из словаря.
-    Возвращает обновлённые метаданные или None при ошибке.
+    Сама загружает и сохраняет метаданные, проверяет,
+    что таблица существует.
     """
+    metadata = load_metadata(META_PATH)
     if table_name not in metadata:
         print(f'Ошибка: Таблица "{table_name}" не существует.')
-        return None
-
+        return
     del metadata[table_name]
+    save_metadata(META_PATH, metadata)
     print(f'Таблица "{table_name}" успешно удалена.')
-    return metadata
 
 
-def list_tables(metadata: dict) -> None:
+@handle_db_errors
+def list_tables() -> None:
     """Вывести имена всех таблиц, каждую на отдельной строке."""
+    metadata = load_metadata(META_PATH)
     for name in metadata:
         print(f"- {name}")
 
@@ -78,21 +90,19 @@ def parse_value(raw: str, col_type: str) -> int | bool | str | None:
     return raw
 
 
-def insert(
-    metadata: dict,
-    table_data: dict,
-    table_name: str,
-    raw_values: list[str],
-) -> dict | None:
+@handle_db_errors
+def insert(table_name: str, raw_values: list[str]) -> bool:
     """Добавить строку в таблицу.
 
-    Проверяет существование таблицы, число и корректность значений,
-    сама генерирует ID (максимум существующих + 1). Возвращает
-    обновлённые данные таблицы или None при ошибке.
+    Сама загружает метаданные и данные таблицы, проверяет число и
+    корректность значений, генерирует ID (максимум существующих + 1)
+    и сохраняет файл. Возвращает True, если строка добавлена,
+    иначе False.
     """
+    metadata = load_metadata(META_PATH)
     if table_name not in metadata:
         print(f'Ошибка: Таблица "{table_name}" не существует.')
-        return None
+        return False
     columns = metadata[table_name]["columns"]
     target = [name for name in columns if name != "ID"]
     if len(raw_values) != len(target):
@@ -100,7 +110,7 @@ def insert(
             f'Ошибка: неверное число значений для таблицы "{table_name}": '
             f"ожидалось {len(target)}, получено {len(raw_values)}."
         )
-        return None
+        return False
     values = []
     for name, raw in zip(target, raw_values):
         value = parse_value(raw, columns[name])
@@ -109,91 +119,97 @@ def insert(
                 f'Ошибка: значение "{raw}" для столбца "{name}" '
                 f"не приводится к типу {columns[name]}."
             )
-            return None
+            return False
         values.append(value)
+    table_data = load_table_data(table_name)
     new_id = max((int(key) for key in table_data), default=0) + 1
     table_data[str(new_id)] = dict(zip(target, values))
+    save_table_data(table_name, table_data)
     print(f'Строка с ID = {new_id} успешно добавлена в таблицу "{table_name}".')
-    return table_data
+    return True
 
 
+@handle_db_errors
 def select(
-    metadata: dict,
-    table_data: dict,
     table_name: str,
     where: tuple[str, str] | None = None,
-) -> None:
-    """Вывести строки таблицы в виде таблицы PrettyTable.
+) -> PrettyTable | None:
+    """Собрать PrettyTable со строками таблицы.
 
-    Если задан where (столбец, значение), вывести только строки,
-    у которых значение столбца совпадает с указанным.
+    Сама загружает метаданные и данные таблицы. Если задан where
+    (столбец, значение), в таблицу попадают только подходящие строки.
+    Возвращает PrettyTable или None, если данные вывести нельзя;
+    печатью занимается engine — так результат потом можно кэшировать.
     """
+    metadata = load_metadata(META_PATH)
     if table_name not in metadata:
         print(f'Ошибка: Таблица "{table_name}" не существует.')
-        return
+        return None
     columns = metadata[table_name]["columns"]
     if where is not None:
         col, raw = where
         if col not in columns:
             print(f'Ошибка: Столбца "{col}" в таблице "{table_name}" нет.')
-            return
+            return None
         expected = parse_value(raw, columns[col])
         if expected is None:
             print(
                 f'Ошибка: значение "{raw}" для столбца "{col}" '
                 f"не приводится к типу {columns[col]}."
             )
-            return
+            return None
+    table_data = load_table_data(table_name)
     table = PrettyTable()
     table.field_names = list(columns)
     for key in sorted(table_data, key=int):
         row = {"ID": int(key), **table_data[key]}
         if where is None or row[col] == expected:
             table.add_row([row[name] for name in columns])
-    print(table)
+    return table
 
 
+@handle_db_errors
 def update(
-    metadata: dict,
-    table_data: dict,
     table_name: str,
     set_col: str,
     raw_value: str,
     where: tuple[str, str],
-) -> dict | None:
+) -> bool:
     """Обновить значение столбца в строках, подходящих под условие.
 
-    Проверяет таблицу, столбцы и типы значений. Возвращает
-    обновлённые данные таблицы или None, если менять нечего.
+    Сама загружает и сохраняет данные, проверяет столбцы и типы
+    значений. Возвращает True, если изменения сохранены, иначе False.
     """
+    metadata = load_metadata(META_PATH)
     if table_name not in metadata:
         print(f'Ошибка: Таблица "{table_name}" не существует.')
-        return None
+        return False
     columns = metadata[table_name]["columns"]
     if set_col not in columns:
         print(f'Ошибка: Столбца "{set_col}" в таблице "{table_name}" нет.')
-        return None
+        return False
     if set_col == "ID":
         print('Ошибка: Столбец "ID" изменять нельзя, он генерируется сам.')
-        return None
+        return False
     where_col, where_raw = where
     if where_col not in columns:
         print(f'Ошибка: Столбца "{where_col}" в таблице "{table_name}" нет.')
-        return None
+        return False
     value = parse_value(raw_value, columns[set_col])
     if value is None:
         print(
             f'Ошибка: значение "{raw_value}" для столбца "{set_col}" '
             f"не приводится к типу {columns[set_col]}."
         )
-        return None
+        return False
     expected = parse_value(where_raw, columns[where_col])
     if expected is None:
         print(
             f'Ошибка: значение "{where_raw}" для столбца "{where_col}" '
             f"не приводится к типу {columns[where_col]}."
         )
-        return None
+        return False
+    table_data = load_table_data(table_name)
     updated = 0
     for key in sorted(table_data, key=int):
         row = {"ID": int(key), **table_data[key]}
@@ -202,37 +218,37 @@ def update(
             updated += 1
     if not updated:
         print("Подходящих строк не найдено.")
-        return None
+        return False
+    save_table_data(table_name, table_data)
     print(f"Обновлено строк: {updated}.")
-    return table_data
+    return True
 
 
-def delete(
-    metadata: dict,
-    table_data: dict,
-    table_name: str,
-    where: tuple[str, str],
-) -> dict | None:
+@handle_db_errors
+def delete(table_name: str, where: tuple[str, str]) -> bool:
     """Удалить строки, подходящие под условие.
 
-    Проверяет таблицу, столбец условия и тип значения. Возвращает
-    обновлённые данные таблицы или None, если удалять нечего.
+    Сама загружает и сохраняет данные, проверяет столбец условия
+    и тип значения. Возвращает True, если изменения сохранены,
+    иначе False.
     """
+    metadata = load_metadata(META_PATH)
     if table_name not in metadata:
         print(f'Ошибка: Таблица "{table_name}" не существует.')
-        return None
+        return False
     columns = metadata[table_name]["columns"]
     where_col, where_raw = where
     if where_col not in columns:
         print(f'Ошибка: Столбца "{where_col}" в таблице "{table_name}" нет.')
-        return None
+        return False
     expected = parse_value(where_raw, columns[where_col])
     if expected is None:
         print(
             f'Ошибка: значение "{where_raw}" для столбца "{where_col}" '
             f"не приводится к типу {columns[where_col]}."
         )
-        return None
+        return False
+    table_data = load_table_data(table_name)
     deleted = 0
     for key in sorted(table_data, key=int):
         row = {"ID": int(key), **table_data[key]}
@@ -241,6 +257,7 @@ def delete(
             deleted += 1
     if not deleted:
         print("Подходящих строк не найдено.")
-        return None
+        return False
+    save_table_data(table_name, table_data)
     print(f"Удалено строк: {deleted}.")
-    return table_data
+    return True
