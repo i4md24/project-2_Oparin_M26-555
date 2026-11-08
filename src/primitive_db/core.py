@@ -3,7 +3,11 @@
 from prettytable import PrettyTable
 
 from primitive_db.constants import META_PATH, VALID_TYPES
-from primitive_db.decorators import confirm_action, handle_db_errors
+from primitive_db.decorators import (
+    confirm_action,
+    handle_db_errors,
+    log_time,
+)
 from primitive_db.utils import (
     load_metadata,
     load_table_data,
@@ -93,6 +97,7 @@ def parse_value(raw: str, col_type: str) -> int | bool | str | None:
 
 
 @handle_db_errors
+@log_time
 def insert(table_name: str, raw_values: list[str]) -> bool:
     """Добавить строку в таблицу.
 
@@ -132,6 +137,7 @@ def insert(table_name: str, raw_values: list[str]) -> bool:
 
 
 @handle_db_errors
+@log_time
 def select(
     table_name: str,
     where: tuple[str, str] | None = None,
@@ -171,6 +177,7 @@ def select(
 
 
 @handle_db_errors
+@log_time
 def update(
     table_name: str,
     set_col: str,
@@ -228,6 +235,7 @@ def update(
 
 @handle_db_errors
 @confirm_action("удалить строки")
+@log_time
 def delete(table_name: str, where: tuple[str, str]) -> bool:
     """Удалить строки, подходящие под условие.
 

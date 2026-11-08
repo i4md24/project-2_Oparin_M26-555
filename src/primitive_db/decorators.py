@@ -1,6 +1,7 @@
 """Декораторы primitive_db: обработка ошибок, подтверждения, время."""
 
 import functools
+import time
 
 
 def handle_db_errors(func):
@@ -49,3 +50,23 @@ def confirm_action(action_name: str):
         return wrapper
 
     return decorator
+
+
+def log_time(func):
+    """Замерять и печатать время выполнения функции.
+
+    Берёт time.monotonic до и после вызова: монотонные часы
+    не зависят от перевода системного времени. Имя функции
+    печатается из func.__name__ — его сохраняет functools.wraps
+    даже в стеке декораторов.
+    """
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        start = time.monotonic()
+        result = func(*args, **kwargs)
+        elapsed = time.monotonic() - start
+        print(f"Функция {func.__name__} выполнена за {elapsed:.6f} с.")
+        return result
+
+    return wrapper
