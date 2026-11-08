@@ -1,7 +1,7 @@
 [project]
 name = "primitive-db"
 version = "0.1.0"
-description = "Add your description here"
+description = "Консольный эмулятор реляционной базы данных: создание таблиц, CRUD-операции, валидация типов и кэширование запросов."
 readme = "README.md"
 authors = [
     { name = "Игорь Опарин", email = "i4md24i@yandex.ru" }
