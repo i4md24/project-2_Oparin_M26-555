@@ -54,3 +54,62 @@ def list_tables(metadata: dict) -> None:
     """Вывести имена всех таблиц, каждую на отдельной строке."""
     for name in metadata:
         print(f"- {name}")
+
+
+def parse_value(raw: str, col_type: str) -> int | bool | str | None:
+    """Привести строковое значение к типу столбца.
+
+    Возвращает приведённое значение или None, если привести не удалось.
+    """
+    if col_type == "int":
+        try:
+            return int(raw)
+        except ValueError:
+            return None
+    if col_type == "bool":
+        lowered = raw.lower()
+        if lowered == "true":
+            return True
+        if lowered == "false":
+            return False
+        return None
+    return raw
+
+
+def insert(
+    metadata: dict,
+    table_data: dict,
+    table_name: str,
+    raw_values: list[str],
+) -> dict | None:
+    """Добавить строку в таблицу.
+
+    Проверяет существование таблицы, число и корректность значений,
+    сама генерирует ID (максимум существующих + 1). Возвращает
+    обновлённые данные таблицы или None при ошибке.
+    """
+    if table_name not in metadata:
+        print(f'Ошибка: Таблица "{table_name}" не существует.')
+        return None
+    columns = metadata[table_name]["columns"]
+    target = [name for name in columns if name != "ID"]
+    if len(raw_values) != len(target):
+        print(
+            f'Ошибка: неверное число значений для таблицы "{table_name}": '
+            f"ожидалось {len(target)}, получено {len(raw_values)}."
+        )
+        return None
+    values = []
+    for name, raw in zip(target, raw_values):
+        value = parse_value(raw, columns[name])
+        if value is None:
+            print(
+                f'Ошибка: значение "{raw}" для столбца "{name}" '
+                f"не приводится к типу {columns[name]}."
+            )
+            return None
+        values.append(value)
+    new_id = max((int(key) for key in table_data), default=0) + 1
+    table_data[str(new_id)] = dict(zip(target, values))
+    print(f'Строка с ID = {new_id} успешно добавлена в таблицу "{table_name}".')
+    return table_data

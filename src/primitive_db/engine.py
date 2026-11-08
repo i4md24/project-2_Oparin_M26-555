@@ -9,27 +9,50 @@ from primitive_db.constants import (
     CMD_DROP_TABLE,
     CMD_EXIT,
     CMD_HELP,
+    CMD_INSERT,
     CMD_LIST_TABLES,
     META_PATH,
 )
-from primitive_db.core import create_table, drop_table, list_tables
-from primitive_db.utils import load_metadata, save_metadata
+from primitive_db.core import create_table, drop_table, insert, list_tables
+from primitive_db.utils import (
+    load_metadata,
+    load_table_data,
+    save_metadata,
+    save_table_data,
+)
 
 
 def print_help() -> None:
-    """Вывести справку по командам работы с таблицами."""
+    """Вывести справку по всем командам."""
     print("\n***Процесс работы с таблицей***")
     print("Функции:")
     print("create_table <имя_таблицы> <столбец:тип> ... - создать таблицу")
     print("drop_table <имя_таблицы> - удалить таблицу")
     print("list_tables - показать список таблиц")
+    print("\n***Процесс работы с данными***")
+    print("insert into <имя_таблицы> values (<значение>, ...) - добавить строку")
     print("\nОбщие команды:")
     print("exit - выйти из программы")
     print("help - справочная информация")
 
 
+def parse_insert_values(raw: str) -> list[str] | None:
+    """Разобрать строку "(Sergei, 28, true)" в список значений.
+
+    Возвращает список строк-значений или None при ошибке формата.
+    """
+    raw = raw.strip()
+    if not raw.startswith("(") or not raw.endswith(")"):
+        print("Значения нужно указать в круглых скобках: values (<значение>, ...)")
+        return None
+    inner = raw[1:-1].strip()
+    if not inner:
+        return []
+    return [token.strip() for token in inner.split(",")]
+
+
 def run() -> None:
-    """Запустить цикл обработки команд управления таблицами."""
+    """Запустить цикл обработки команд."""
     print_help()
     while True:
         metadata = load_metadata(META_PATH)
@@ -53,6 +76,16 @@ def run() -> None:
                     save_metadata(META_PATH, result)
         elif command == CMD_LIST_TABLES:
             list_tables(metadata)
+        elif command == CMD_INSERT:
+            if len(parts) >= 5 and parts[1] == "into" and parts[3] == "values":
+                values = parse_insert_values(" ".join(parts[4:]))
+                if values is not None:
+                    table_data = load_table_data(parts[2])
+                    result = insert(metadata, table_data, parts[2], values)
+                    if result is not None:
+                        save_table_data(parts[2], result)
+            else:
+                print("Использование: insert into <таблица> values (<значение>, ...)")
         elif command == CMD_HELP:
             print_help()
         elif command == CMD_EXIT:
