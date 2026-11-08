@@ -3,7 +3,7 @@
 from prettytable import PrettyTable
 
 from primitive_db.constants import META_PATH, VALID_TYPES
-from primitive_db.decorators import handle_db_errors
+from primitive_db.decorators import confirm_action, handle_db_errors
 from primitive_db.utils import (
     load_metadata,
     load_table_data,
@@ -47,9 +47,11 @@ def create_table(table_name: str, columns: list[str]) -> None:
 
 
 @handle_db_errors
+@confirm_action("удалить таблицу")
 def drop_table(table_name: str) -> None:
     """Удалить таблицу из метаданных.
 
+    Перед удалением запрашивает подтверждение (confirm_action).
     Сама загружает и сохраняет метаданные, проверяет,
     что таблица существует.
     """
@@ -225,9 +227,11 @@ def update(
 
 
 @handle_db_errors
+@confirm_action("удалить строки")
 def delete(table_name: str, where: tuple[str, str]) -> bool:
     """Удалить строки, подходящие под условие.
 
+    Перед удалением запрашивает подтверждение (confirm_action).
     Сама загружает и сохраняет данные, проверяет столбец условия
     и тип значения. Возвращает True, если изменения сохранены,
     иначе False.

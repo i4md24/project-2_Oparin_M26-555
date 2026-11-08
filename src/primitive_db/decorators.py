@@ -1,4 +1,4 @@
-"""Декораторы primitive_db: обработка ошибок, подтверждения и замер времени."""
+"""Декораторы primitive_db: обработка ошибок, подтверждения, время."""
 
 import functools
 
@@ -27,3 +27,25 @@ def handle_db_errors(func):
             print(f"Произошла непредвиденная ошибка: {e}")
 
     return wrapper
+
+
+def confirm_action(action_name: str):
+    """Фабрика декораторов: спросить подтверждение перед действием.
+
+    Принимает название действия (например, «удалить таблицу») и
+    возвращает декоратор, который перед вызовом функции задаёт
+    вопрос да/нет. При отказе функция не вызывается.
+    """
+
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            answer = input(f"Вы уверены, что хотите {action_name}? (да/нет): ")
+            if answer.strip().lower() in ("да", "y", "yes"):
+                return func(*args, **kwargs)
+            print("Действие отменено.")
+            return None
+
+        return wrapper
+
+    return decorator
