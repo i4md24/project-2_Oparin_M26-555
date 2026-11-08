@@ -1,5 +1,7 @@
 """Ядро primitive_db: логика управления таблицами."""
 
+from prettytable import PrettyTable
+
 from primitive_db.constants import VALID_TYPES
 
 
@@ -113,3 +115,39 @@ def insert(
     table_data[str(new_id)] = dict(zip(target, values))
     print(f'Строка с ID = {new_id} успешно добавлена в таблицу "{table_name}".')
     return table_data
+
+
+def select(
+    metadata: dict,
+    table_data: dict,
+    table_name: str,
+    where: tuple[str, str] | None = None,
+) -> None:
+    """Вывести строки таблицы в виде таблицы PrettyTable.
+
+    Если задан where (столбец, значение), вывести только строки,
+    у которых значение столбца совпадает с указанным.
+    """
+    if table_name not in metadata:
+        print(f'Ошибка: Таблица "{table_name}" не существует.')
+        return
+    columns = metadata[table_name]["columns"]
+    if where is not None:
+        col, raw = where
+        if col not in columns:
+            print(f'Ошибка: Столбца "{col}" в таблице "{table_name}" нет.')
+            return
+        expected = parse_value(raw, columns[col])
+        if expected is None:
+            print(
+                f'Ошибка: значение "{raw}" для столбца "{col}" '
+                f"не приводится к типу {columns[col]}."
+            )
+            return
+    table = PrettyTable()
+    table.field_names = list(columns)
+    for key in sorted(table_data, key=int):
+        row = {"ID": int(key), **table_data[key]}
+        if where is None or row[col] == expected:
+            table.add_row([row[name] for name in columns])
+    print(table)

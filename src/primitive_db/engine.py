@@ -11,9 +11,10 @@ from primitive_db.constants import (
     CMD_HELP,
     CMD_INSERT,
     CMD_LIST_TABLES,
+    CMD_SELECT,
     META_PATH,
 )
-from primitive_db.core import create_table, drop_table, insert, list_tables
+from primitive_db.core import create_table, drop_table, insert, list_tables, select
 from primitive_db.utils import (
     load_metadata,
     load_table_data,
@@ -31,6 +32,7 @@ def print_help() -> None:
     print("list_tables - показать список таблиц")
     print("\n***Процесс работы с данными***")
     print("insert into <имя_таблицы> values (<значение>, ...) - добавить строку")
+    print("select from <имя_таблицы> [where <столбец> = <значение>] - показать строки")
     print("\nОбщие команды:")
     print("exit - выйти из программы")
     print("help - справочная информация")
@@ -86,6 +88,22 @@ def run() -> None:
                         save_table_data(parts[2], result)
             else:
                 print("Использование: insert into <таблица> values (<значение>, ...)")
+        elif command == CMD_SELECT:
+            if len(parts) == 3 and parts[1] == "from":
+                select(metadata, load_table_data(parts[2]), parts[2])
+            elif (
+                len(parts) == 7
+                and parts[1] == "from"
+                and parts[3] == "where"
+                and parts[5] == "="
+            ):
+                where = (parts[4], parts[6])
+                select(metadata, load_table_data(parts[2]), parts[2], where)
+            else:
+                print(
+                    "Использование: select from <таблица> "
+                    "[where <столбец> = <значение>]"
+                )
         elif command == CMD_HELP:
             print_help()
         elif command == CMD_EXIT:
