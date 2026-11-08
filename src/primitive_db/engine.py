@@ -4,6 +4,7 @@ import shlex
 
 from prompt import string
 
+from primitive_db.caching import create_cacher
 from primitive_db.constants import (
     CMD_CREATE_TABLE,
     CMD_DELETE,
@@ -62,9 +63,13 @@ def run() -> None:
     """Запустить цикл обработки команд.
 
     Движок только разбирает команду на части и вызывает функцию ядра;
-    вся работа с файлами и перехват ошибок живут в core.
+    вся работа с файлами и перехват ошибок живут в core. Результаты
+    select кэшируются замыканием create_cacher; после любой команды,
+    меняющей данные, кэш пересоздаётся, чтобы не показывать
+    устаревшие строки.
     """
     print_help()
+    cached_select = create_cacher()
     while True:
         parts = shlex.split(string("Введите команду: "))
         if not parts:
@@ -75,11 +80,13 @@ def run() -> None:
                 print("Использование: create_table <имя_таблицы> <столбец:тип> ...")
             else:
                 create_table(args[0], args[1:])
+                cached_select = create_cacher()
         elif command == CMD_DROP_TABLE:
             if not args:
                 print("Использование: drop_table <имя_таблицы>")
             else:
                 drop_table(args[0])
+                cached_select = create_cacher()
         elif command == CMD_LIST_TABLES:
             list_tables()
         elif command == CMD_INSERT:
@@ -87,11 +94,12 @@ def run() -> None:
                 values = parse_insert_values(" ".join(parts[4:]))
                 if values is not None:
                     insert(parts[2], values)
+                    cached_select = create_cacher()
             else:
                 print("Использование: insert into <таблица> values (<значение>, ...)")
         elif command == CMD_SELECT:
             if len(parts) == 3 and parts[1] == "from":
-                table = select(parts[2])
+                table = cached_select((parts[2], None), lambda: select(parts[2]))
                 if table is not None:
                     print(table)
             elif (
@@ -100,7 +108,10 @@ def run() -> None:
                 and parts[3] == "where"
                 and parts[5] == "="
             ):
-                table = select(parts[2], (parts[4], parts[6]))
+                where = (parts[4], parts[6])
+                table = cached_select(
+                    (parts[2], where), lambda: select(parts[2], where)
+                )
                 if table is not None:
                     print(table)
             else:
@@ -117,6 +128,7 @@ def run() -> None:
                 and parts[8] == "="
             ):
                 update(parts[1], parts[3], parts[5], (parts[7], parts[9]))
+                cached_select = create_cacher()
             else:
                 print(
                     "Использование: update <таблица> set <столбец> = <значение> "
@@ -130,6 +142,7 @@ def run() -> None:
                 and parts[5] == "="
             ):
                 delete(parts[2], (parts[4], parts[6]))
+                cached_select = create_cacher()
             else:
                 print(
                     "Использование: delete from <таблица> "
